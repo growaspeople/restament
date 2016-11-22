@@ -1,13 +1,14 @@
 "use strict";
 
 const path = require("path"),
+      _ = require("lodash"),
+      bookshelf = require("bookshelf"),
       expect = require("expect.js"),
       fetch = require("node-fetch"),
       FormData = require("form-data"),
       fs = require("fs-extra"),
       imageDiff = require("image-diff"),
-      lightOrm = require("light-orm"),
-      mysql = require("mysql"),
+      knex = require("knex"),
       should = require("should");
 
 module.exports = class {
@@ -59,13 +60,16 @@ module.exports = class {
         && this.config.db.user
         && this.config.db.password
     ) {
-      lightOrm.driver = mysql.createConnection({
-        host:     this.config.db.host,
-        database: this.config.db.name,
-        user:     this.config.db.user,
-        password: this.config.db.password
-      });
-      lightOrm.driver.connect();
+      this.bookshelf = bookshelf(knex({
+        client:     "mysql",
+        connection: {
+          host:     this.config.db.host,
+          database: this.config.db.name,
+          user:     this.config.db.user,
+          password: this.config.db.password,
+          charset:  "utf8"
+        }
+      }));
     }
   }
 
@@ -115,7 +119,10 @@ module.exports = class {
 
         it("should return " + test.status + " on " + test.method + " access (posting in " + test.reqformat + " format)", function() {
           const dbtables = (Array.isArray(test.db) ? test.db : [test.db]).map(function(table) {
-            table.table = new lightOrm.Collection(table.tablename);
+            table.table = self.bookshelf.Model.extend({
+              tableName: table.tablename
+            });
+
             return table;
           });
 
@@ -123,42 +130,25 @@ module.exports = class {
             // Empty storage directory
             try {
               fs.emptyDirSync(self.uploadDir);
-
-              // Reset auto increment
-              Promise.all((Array.isArray(test.db) ? test.db : [test.db]).map(function(table) {
-                return new Promise(function(_resolve, _reject) {
-                  lightOrm.driver.query("ALTER TABLE " + table.tablename + " AUTO_INCREMENT = 1;", function(err) {
-                    if (err) {
-                      _reject(err);
-                    }
-                    _resolve();
-                  });
-                });
-              })).then(resolve).catch(reject);
+              resolve();
             } catch (err) {
               reject(err);
             }
           }).then(function() {
+            // Reset auto increment
+            return Promise.all((Array.isArray(test.db) ? test.db : [test.db]).map(function(table) {
+              return self.bookshelf.knex.raw("ALTER TABLE " + table.tablename + " AUTO_INCREMENT = 1;");
+            }));
+          }).then(function() {
             // Remove existing records
             return Promise.all(dbtables.map(function(dbtable) {
-              return new Promise(function(resolve, reject) {
-                dbtable.table.findAll(function(err, existingRecords) {
-                  if (err) {
-                    reject(err);
-                  }
+              return dbtable.table.fetchAll();
+            }).then(function(models) {
+              models = _.flattenDeep(models);
 
-                  Promise.all(existingRecords.map(function(existingRecord) {
-                    return new Promise(function(resolve, reject) {
-                      existingRecord.remove(function(err) {
-                        if (err) {
-                          reject(err);
-                        }
-                        resolve();
-                      });
-                    });
-                  })).then(resolve).catch(reject);
-                });
-              });
+              return Promise.all(models.map(function(model) {
+                return model.destroy();
+              }));
             }));
           }).then(function() {
             //
@@ -170,8 +160,6 @@ module.exports = class {
             return Promise.resolve();
           }).then(function() {
             return Promise.all(dbtables.map(function(table) {
-              let models = []; // eslint-disable-line prefer-const
-
               //
               // Setup mock data
               //
@@ -183,21 +171,12 @@ module.exports = class {
                 table.mock.data = [table.mock.data];
               }
 
-              for (const d of table.mock.data) {
-                models.push(table.table.createModel(d));
-              }
-
-              // Create records
-              return Promise.all(models.map(function(model) {
-                return new Promise(function(resolve, reject) {
-                  model.create(function(err) {
-                    if (err) {
-                      reject(err);
-                    }
-                    resolve();
-                  });
-                });
-              }));
+              // Insert mock data on DB
+              return Promise.all(
+                table.collection()
+                  .forge(table.mock.data)
+                  .invoke("save")
+              );
             }));
           }).then(function() {
             return Promise.all(dbtables.map(function(table) {
@@ -246,104 +225,101 @@ module.exports = class {
             return res.text();
           }).then(function(body) {
             try {
-              const json = JSON.parse(body);
+              const res = JSON.parse(body);
 
-              json.should.be.eql(test.resdata); // Use should.js for object comparison
-
-              return Promise.all(dbtables.map(function(table) {
-                // Check if data in DB is as expected
-                return new Promise(function(resolve, reject) {
-                  if (!table.result || !table.result.data) {
-                    resolve();
-                    return;
-                  }
-
-                  table.table.findAll(function(err, _records) {
-                    if (err) {
-                      reject(err);
-                    }
-
-                    const records = _records.map(function(record) {
-                      return record.getAll();
-                    }).sort(function(record1, record2) {
-                      return record1.id - record2.id;
-                    });
-
-                    if (!Array.isArray(table.result.data)) {
-                      table.result.data = [table.result.data];
-                    }
-
-                    for (let i = 0; i < records.length; i++) {
-                      for (const key of Object.getOwnPropertyNames(table.result.data[i])) {
-                        const expectedColumnData = table.result.data[i][key],
-                              actualColumnData = records[i][key];
-
-                        if (typeof expectedColumnData === "object" && expectedColumnData.type === "not") { // If Restament.not is expected
-                          expect(expectedColumnData).not.to.be(actualColumnData);
-                        } else if (typeof expectedColumnData === "function") {
-                          expect(expectedColumnData(actualColumnData)).to.be(true);
-                        } else { // expectedColumnData is literal
-                          // Check equality
-                          expect(actualColumnData).to.be(expectedColumnData);
-                        }
-                      }
-                    }
-
-                    resolve();
-                  });
-                }).then(function() {
-                  return new Promise(function(resolve, reject) {
-                    if (!table.result || !table.result.uploads) {
-                      resolve();
-                      return;
-                    }
-
-                    table.result.uploads.forEach(function(upload) {
-                      const uploadedFileName = path.join(self.uploadDir, upload.filename);
-
-                      imageDiff({
-                        actualImage:   uploadedFileName,
-                        expectedImage: upload.original,
-                        diffImage:     path.join(self.logDir, "images/diff")
-                      }, function(err, imagesAreSame) {
-                        if (err) {
-                          reject(err);
-                        }
-
-                        // Save image if images doesn't match
-                        if (!imagesAreSame) {
-                          const resultDir = path.join(__dirname, "../tmp/images");
-
-                          if (fs.existsSync(uploadedFileName)) {
-                            fs.copySync(uploadedFileName, path.join(resultDir, "uploaded"));
-                          } else {
-                            reject(new Error(uploadedFileName + " doesn't exist!"));
-                          }
-
-                          if (fs.existsSync(upload.original)) {
-                            fs.copySync(upload.original, path.join(resultDir, "expected"));
-                          } else {
-                            reject(new Error(upload.original + " doesn't exist!"));
-                          }
-                        }
-
-                        expect(imagesAreSame).to.be(true);
-                        resolve();
-                      });
-                    });
-                  });
-                });
-              }));
-            } catch (e) {
-              if (e instanceof SyntaxError) {
+              res.should.be.eql(test.resdata); // Use should.js for object comparison
+              return Promise.resolve();
+            } catch (err) {
+              if (err instanceof SyntaxError) {
                 return Promise.reject(
                   "Response body is not JSON! Response body is:\n"
                   + "--------------------\n"
                   + body + "\n"
                   + "--------------------\n"
                 );
+              } else {
+                return Promise.reject(err);
               }
             }
+          }).then(function() {
+            return Promise.all(dbtables.map(function(table) {
+              // Assert dataset stored in DB
+              if (!table.result || !table.result.data) {
+                return Promise.resolve();
+              }
+
+              return table.fetchAll().then(function(_records) {
+                const records = _records
+                  .toJSON()
+                  .sort(function(record1, record2) {
+                    return record1.id - record2.id;
+                  });
+
+                if (!Array.isArray(table.result.data)) {
+                  table.result.data = [table.result.data];
+                }
+
+                for (let i = 0; i < records.length; i++) {
+                  for (const key of Object.getOwnPropertyNames(table.result.data[i])) {
+                    const expectedColumnData = table.result.data[i][key],
+                          actualColumnData = records[i][key];
+
+                    if (typeof expectedColumnData === "object" && expectedColumnData.type === "not") { // If Restament.not is expected
+                      expect(expectedColumnData).not.to.be(actualColumnData);
+                    } else if (typeof expectedColumnData === "function") {
+                      expect(expectedColumnData(actualColumnData)).to.be(true);
+                    } else { // expectedColumnData is literal
+                      // Check equality
+                      expect(actualColumnData).to.be(expectedColumnData);
+                    }
+                  }
+                }
+
+                //
+                // Assert uploaded files
+                //
+                return new Promise(function(resolve, reject) {
+                  if (!table.result || !table.result.uploads) {
+                    resolve();
+                    return;
+                  }
+
+                  table.result.uploads.forEach(function(upload) {
+                    const uploadedFileName = path.join(self.uploadDir, upload.filename);
+
+                    imageDiff({
+                      actualImage:   uploadedFileName,
+                      expectedImage: upload.original,
+                      diffImage:     path.join(self.logDir, "images/diff")
+                    }, function(err, imagesAreSame) {
+                      if (err) {
+                        reject(err);
+                      }
+
+                      // Save image if images doesn't match
+                      if (!imagesAreSame) {
+                        const resultDir = path.join(__dirname, "../tmp/images");
+
+                        if (fs.existsSync(uploadedFileName)) {
+                          fs.copySync(uploadedFileName, path.join(resultDir, "uploaded"));
+                        } else {
+                          reject(new Error(uploadedFileName + " doesn't exist!"));
+                        }
+
+                        if (fs.existsSync(upload.original)) {
+                          fs.copySync(upload.original, path.join(resultDir, "expected"));
+                        } else {
+                          reject(new Error(upload.original + " doesn't exist!"));
+                        }
+                      }
+
+                      expect(imagesAreSame).to.be(true);
+                      resolve();
+                    });
+                  });
+                });
+              });
+            }));
           }).then(function() {
             if (typeof test.after === "function") {
               return test.after();

@@ -4,11 +4,13 @@
   "description": "Testing Framework for REST APIs with JSON-like Declaration",
   "main": "index.js",
   "dependencies": {
+    "bookshelf": "0.10.x",
     "expect.js": "0.3.x",
     "form-data": "1.0.x",
     "fs-extra": "0.30.x",
     "image-diff": "1.x",
-    "light-orm": "0.1.x",
+    "knex": "0.12.x",
+    "lodash": "4.x",
     "mysql": "2.x",
     "node-fetch": "1.x",
     "should": "11.x"
