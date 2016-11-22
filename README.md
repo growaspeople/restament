@@ -1,6 +1,8 @@
 Restament
 =========
 
+[![Waffle.io](https://badge.waffle.io/phanect/restament.png?label=ready&title=Ready)](https://waffle.io/phanect/restament)
+
 Restament is a testing framework for REST APIs.
 You can declare tests with JSON-like format.
 
@@ -25,8 +27,8 @@ let restament = new Restament({
   logDir:    "./tmp/logs", // Directory to store logs
   db: { // Configuration for connecting to the Database
     host:     "localhost",
-    name:     "dbname",   
-    user:     "username",   
+    name:     "dbname",
+    user:     "username",
     password: "password"
   }
 });
