@@ -116,7 +116,7 @@ module.exports = class {
           postData = JSON.stringify(test.reqdata);
         }
 
-        it("should return " + test.status + " on " + test.method + " access (posting in " + test.reqformat + " format)", function() {
+        it("should return " + test.status + " on " + test.method + " access (posting in " + test.reqformat + " format)", function(done) {
           const dbtables = (Array.isArray(test.db) ? test.db : [test.db]).map(function(table) {
             table.table = self.bookshelf.Model.extend({
               tableName: table.tablename
@@ -125,7 +125,7 @@ module.exports = class {
             return table;
           });
 
-          return new Promise(function(resolve, reject) {
+          new Promise(function(resolve, reject) {
             // Empty storage directory
             try {
               fs.emptyDirSync(self.uploadDir);
@@ -331,8 +331,12 @@ module.exports = class {
             } else {
               return Promise.resolve();
             }
+          }).then(function() {
+            done(); // eslint-disable-line promise/no-callback-in-promise
+            return Promise.resolve();
           }).catch(function(err) {
             should.ifError(err);
+            done(err); // eslint-disable-line promise/no-callback-in-promise
             return Promise.reject(err);
           });
         });
