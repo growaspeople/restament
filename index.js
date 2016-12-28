@@ -223,6 +223,12 @@ module.exports = class {
             expect(res.status).to.be(test.status);
             return res.text();
           }).then(function(body) {
+            // Skip if resdata is not defined
+            // Note: Do NOT skip when test.resdata === null. `if (!test.resdata) {...` skips when resdata is defined as `null`
+            if (typeof test.resdata === "undefined") {
+              return Promise.resolve();
+            }
+
             try {
               const res = JSON.parse(body);
 
