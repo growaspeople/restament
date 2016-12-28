@@ -134,8 +134,11 @@ module.exports = class {
               reject(err);
             }
           }).then(function() {
+            if (!Array.isArray(test.db)) {
+              test.db = [test.db];
+            }
             // Reset auto increment
-            return Promise.all((Array.isArray(test.db) ? test.db : [test.db]).map(function(table) {
+            return Promise.all(test.db.map(function(table) {
               return self.bookshelf.knex.raw("ALTER TABLE " + table.tablename + " AUTO_INCREMENT = 1;");
             }));
           }).then(function() {
@@ -214,7 +217,7 @@ module.exports = class {
 
             return fetch(uri, {
               method: test.method,
-              body:   test.method !== "GET" ? postData : null,
+              body:   test.method !== "GET" ? postData : null, // eslint-disable-line promise/always-return
               header: {
                 "Content-Type": contentType
               }
