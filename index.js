@@ -1,7 +1,6 @@
 "use strict";
 
 const path = require("path"),
-      _ = require("lodash"),
       bookshelf = require("bookshelf"),
       expect = require("expect.js"),
       fetch = require("node-fetch"),
@@ -143,13 +142,13 @@ module.exports = class {
             // Remove existing records
             return Promise.all(dbtables.map(function(dbtable) {
               return dbtable.table.fetchAll();
-            }).then(function(models) {
-              models = _.flattenDeep(models);
-
-              return Promise.all(models.map(function(model) {
-                return model.destroy();
+            })).then(function(collections) {
+              return Promise.all(collections.map(function(models) {
+                return Promise.all(models.map(function(model) {
+                  return model.destroy();
+                }));
               }));
-            }));
+            });
           }).then(function() {
             //
             // Before
@@ -173,9 +172,9 @@ module.exports = class {
 
               // Insert mock data on DB
               return Promise.all(
-                table.collection()
-                  .forge(table.mock.data)
-                  .invoke("save")
+                table.mock.data.map(function(record) {
+                  return new table.table(record).save({}, { method: "insert" });
+                })
               );
             }));
           }).then(function() {
@@ -248,7 +247,7 @@ module.exports = class {
                 return Promise.resolve();
               }
 
-              return table.fetchAll().then(function(_records) {
+              return table.table.fetchAll().then(function(_records) {
                 const records = _records
                   .toJSON()
                   .sort(function(record1, record2) {
