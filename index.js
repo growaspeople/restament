@@ -233,10 +233,7 @@ module.exports = class {
             }
 
             try {
-              const res = JSON.parse(body);
-
-              res.should.be.eql(test.resdata); // Use should.js for object comparison
-              return Promise.resolve();
+              return Promise.resolve(JSON.parse(body));
             } catch (err) {
               if (err instanceof SyntaxError) {
                 return Promise.reject(
@@ -249,7 +246,9 @@ module.exports = class {
                 return Promise.reject(err);
               }
             }
-          }).then(function() {
+          }).then(function(res) {
+            res.should.be.eql(test.resdata); // Use should.js for object comparison
+
             return Promise.all(dbtables.map(function(table) {
               // Assert dataset stored in DB
               if (!table.result || !table.result.data) {
