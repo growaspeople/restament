@@ -98,11 +98,15 @@ module.exports = class {
         });
       }
 
+      if (!Array.isArray(test.db)) {
+        test.db = [test.db];
+      }
+
       describe(test.url, function() {
         this.timeout(5000);
 
         it("should return " + test.status + " on " + test.method + " access (posting in " + test.reqformat + " format)", function(done) {
-          const dbtables = (Array.isArray(test.db) ? test.db : [test.db]).map(function(table) {
+          const dbtables = test.db.map(function(table) {
             table.table = self.bookshelf.Model.extend({
               tableName: table.tablename
             });
@@ -119,9 +123,6 @@ module.exports = class {
               reject(err);
             }
           }).then(function() {
-            if (!Array.isArray(test.db)) {
-              test.db = [test.db];
-            }
             // Reset auto increment
             return Promise.all(test.db.map(function(table) {
               return self.bookshelf.knex.raw("ALTER TABLE " + table.tablename + " AUTO_INCREMENT = 1;");
