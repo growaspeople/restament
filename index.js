@@ -107,38 +107,17 @@ module.exports = class {
 
         it("should return " + test.status + " on " + test.method + " access (posting in " + test.reqformat + " format)", function(done) {
           const dbtables = test.db.map(function(table) {
-            table.table = self.bookshelf.Model.extend({
-              tableName: table.tablename
-            });
+                  table.table = self.bookshelf.Model.extend({
+                    tableName: table.tablename
+                  });
 
-            return table;
-          });
+                  return table;
+                }),
+                models = dbtables.map(function(dbtable) {
+                  return dbtable.table;
+                });
 
-          new Promise(function(resolve, reject) {
-            // Empty storage directory
-            try {
-              fs.emptyDirSync(self.uploadDir);
-              resolve();
-            } catch (err) {
-              reject(err);
-            }
-          }).then(function() {
-            // Reset auto increment
-            return Promise.all(test.db.map(function(table) {
-              return self.bookshelf.knex.raw("ALTER TABLE " + table.tablename + " AUTO_INCREMENT = 1;");
-            }));
-          }).then(function() {
-            // Remove existing records
-            return Promise.all(dbtables.map(function(dbtable) {
-              return dbtable.table.fetchAll();
-            })).then(function(collections) {
-              return Promise.all(collections.map(function(models) {
-                return Promise.all(models.map(function(model) {
-                  return model.destroy();
-                }));
-              }));
-            });
-          }).then(function() {
+          self.cleanup(models).then(function() {
             //
             // Before
             //
@@ -330,6 +309,27 @@ module.exports = class {
         });
       });
     }
+  }
+
+  // TODO Make private when rewriting in TypeScript
+  /**
+   * Cleanup existing data from directory and database
+   *
+   * @param  {Object} models Bookshelf model object
+   * @returns {Promise} Promise object
+   */
+  async cleanup(models) {
+    // Empty storage directory
+    fs.emptyDirSync(this.uploadDir);
+
+    for (const model of models) {
+      // Remove existing records
+      await this.bookshelf.knex.raw("DELETE FROM " + model.tableName + ";");
+      // Reset auto increment
+      await this.bookshelf.knex.raw("ALTER TABLE " + model.tableName + " AUTO_INCREMENT = 1;");
+    }
+
+    return Promise.resolve();
   }
 
   // TODO Make private when rewriting in TypeScript
