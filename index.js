@@ -85,36 +85,21 @@ module.exports = class {
 
     for (const test of tests) {
       const uri = self.endpoint + test.url;
+      let reqBody;
+
+      if (test.method === "GET") {
+        reqBody = null;
+      } else {
+        reqBody = self.genReqBody({
+          method:    test.method,
+          reqdata:   test.reqdata,
+          reqformat: test.reqformat,
+          uploads:   test.uploads
+        });
+      }
 
       describe(test.url, function() {
         this.timeout(5000);
-
-        let postData;
-
-        //
-        // Prepare data to post/put
-        //
-        if (test.reqformat === "FORM") {
-          postData = new FormData();
-
-          for (const key of Object.keys(test.reqdata)) {
-            // Workaround: Node.js's form-data doesn't support array as form value, unlike browser implementation.
-            // You need to join with comma instead.
-            postData.append(key, Array.isArray(test.reqdata[key]) ? test.reqdata[key].join(",") : test.reqdata[key]);
-          }
-
-          if ((test.method === "POST" || test.method === "PUT") && test.uploads) {
-            for (const key of Object.keys(test.uploads)) { // Uploading file(s)
-              postData.append(key, fs.createReadStream(test.uploads[key]));
-            }
-          }
-        } else { // if test.reqformat === "JSON" or unspecified
-          if (test.uploads) { // When upload file is specified, you need to send as form data
-            return Promise.reject(new Error("Cannot upload files with data in JSON format"));
-          }
-
-          postData = JSON.stringify(test.reqdata);
-        }
 
         it("should return " + test.status + " on " + test.method + " access (posting in " + test.reqformat + " format)", function(done) {
           const dbtables = (Array.isArray(test.db) ? test.db : [test.db]).map(function(table) {
@@ -217,7 +202,7 @@ module.exports = class {
 
             return fetch(uri, {
               method: test.method,
-              body:   test.method !== "GET" ? postData : null, // eslint-disable-line promise/always-return
+              body:   reqBody,
               header: {
                 "Content-Type": contentType
               }
@@ -343,6 +328,74 @@ module.exports = class {
           });
         });
       });
+    }
+  }
+
+  // TODO Make private when rewriting in TypeScript
+  /**
+   * Generate request body
+   *
+   * @param   {Object} opts arguments to pass
+   * @param   {string} opts.method HTTP method to use
+   * @param   {Object} opts.reqdata Request parameters to send
+   * @param   {Object} opts.reqformat Request format: JSON or FORM
+   * @param   {Object} [opts.uploads=undefined] Object of key-value pairs which expresses file name and path to dummy uploading file
+   * @returns {string} request body to send
+   */
+  genReqBody(opts) {
+    const method = opts.method,
+          reqdata = opts.reqdata,
+          reqformat = opts.reqformat,
+          uploads = opts.uploads;
+
+    if (method === "GET") {
+      throw new Error("This should be restament's bug!\nThis method should not run when requesting in GET. Users should add parameters in URL.");
+    }
+
+    if (!(
+      method === "POST"
+      || method === "PUT"
+      || method === "PATCH"
+      || method === "DELETE"
+      || method === "HEAD"
+      || method === "OPTIONS"
+      || method === "CONNECT"
+    )) {
+      throw new Error("Argument opts.method is undefined");
+    } else if (typeof reqdata === "undefined") {
+      throw new Error("Argument opts.reqdata is undefined");
+    } else if (!(
+      reqformat === "FORM"
+      || method === "JSON"
+    )) {
+      throw new Error("Argument opts.reqformat must be FORM or JSON");
+    }
+
+    //
+    // Prepare data to post/put
+    //
+    if (reqformat === "FORM") {
+      let reqBody = new FormData(); // eslint-disable-line prefer-const
+
+      for (const key of Object.keys(reqdata)) {
+        // Workaround: Node.js's form-data doesn't support array as form value, unlike browser implementation.
+        // You need to join with comma instead.
+        reqBody.append(key, Array.isArray(reqdata[key]) ? reqdata[key].join(",") : reqdata[key]);
+      }
+
+      if ((method === "POST" || method === "PUT") && uploads) {
+        for (const key of Object.keys(uploads)) { // Uploading file(s)
+          reqBody.append(key, fs.createReadStream(uploads[key]));
+        }
+      }
+
+      return reqBody;
+    } else { // if test.reqformat === "JSON" or unspecified
+      if (uploads) { // When upload file is specified, you need to send as form data
+        throw new Error("Cannot upload files with data in JSON format");
+      }
+
+      return JSON.stringify(reqdata);
     }
   }
 };
