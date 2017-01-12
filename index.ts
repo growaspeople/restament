@@ -1,21 +1,21 @@
 "use strict";
 
-const path = require("path"),
-      bookshelf = require("bookshelf"),
-      expect = require("expect.js"),
-      fetch = require("node-fetch"),
-      FormData = require("form-data"),
-      fs = require("fs-extra"),
-      imageDiff = require("image-diff"),
-      knex = require("knex"),
-      should = require("should");
+import * as Bookshelf from "bookshelf";
+import * as expect from "expect.js";
+import * as FormData from "form-data";
+import * as fs from "fs-extra";
+import * as imageDiff from "image-diff";
+import * as knex from "knex";
+import * as fetch from "node-fetch";
+import * as path from "path";
+import * as should from "should";
 
 module.exports = class {
   /**
    * Use `not` in db[].result.data to assert if values differ
    * @return {object} Restament's `not` object
    */
-  static not() {
+  public static not() {
     const args = [];
 
     for (const argument of arguments) {
@@ -28,29 +28,30 @@ module.exports = class {
     };
   }
 
+  /** Bookshelf instance */
+  private bookshelf: Bookshelf;
+
   /**
    * Constructor for Restament
    *
-   * @param {object} opts             Options
-   * @param {string} opts.endpoint    API Endpoint
-   * @param {string} opts.db.host     Database host name
-   * @param {string} opts.db.name     Database name
-   * @param {string} opts.db.user     Database user name
-   * @param {string} opts.db.password Database password
+   * @param {object} config             Options
+   * @param {string} config.endpoint    API Endpoint
+   * @param {string} config.db.host     Database host name
+   * @param {string} config.db.name     Database name
+   * @param {string} config.db.user     Database user name
+   * @param {string} config.db.password Database password
    */
-  constructor(opts) {
-    this.config = opts;
-
+  constructor(private config) {
     // Option assertion
-    if (typeof opts !== "object"
-        || !opts.endpoint
+    if (typeof config !== "object"
+        || !config.endpoint
     ) {
       throw new Error("Missing option value `endpoint`");
     }
 
-    this.endpoint = opts.endpoint;
-    this.uploadDir = opts && opts.uploadDir ? opts.uploadDir : null;
-    this.logDir = opts && opts.logDir ? opts.logDir : null;
+    this.endpoint = this.config.endpoint;
+    this.uploadDir = this.config && this.config.uploadDir ? this.config.uploadDir : null;
+    this.logDir = this.config && this.config.logDir ? this.config.logDir : null;
 
     // DB configuration
     if (typeof this.config.db === "object"
@@ -59,7 +60,7 @@ module.exports = class {
         && this.config.db.user
         && this.config.db.password
     ) {
-      this.bookshelf = bookshelf(knex({
+      this.bookshelf = Bookshelf(knex({
         client:     "mysql",
         connection: {
           host:     this.config.db.host,
