@@ -16,7 +16,9 @@
   },
   "devDependencies": {
     "eslint": "latest",
-    "eslint-config-growaspeople": "latest"
+    "eslint-config-growaspeople": "latest",
+    "tslint": "latest",
+    "typescript": "2.x"
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"

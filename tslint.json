@@ -1,0 +1,15 @@
+{
+  "extends": "tslint:latest",
+  "rules": {
+    "max-line-length": false,
+    "no-duplicate-variable": true,
+    "object-literal-shorthand": false,
+    "one-variable-per-declaration": false,
+    "variable-name": [
+      true,
+      "ban-keywords",
+      "check-format",
+      "allow-leading-underscore"
+    ]
+  }
+}
