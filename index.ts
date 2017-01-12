@@ -24,7 +24,7 @@ module.exports = class {
 
     return {
       type:   "not",
-      values: args
+      values: args,
     };
   }
 
@@ -63,17 +63,17 @@ module.exports = class {
       this.bookshelf = Bookshelf(knex({
         client:     "mysql",
         connection: {
-          host:     this.config.db.host,
+          charset:  "utf8",
           database: this.config.db.name,
-          user:     this.config.db.user,
+          host:     this.config.db.host,
           password: this.config.db.password,
-          charset:  "utf8"
-        }
+          user:     this.config.db.user,
+        },
       }));
     }
   }
 
-  test(tests) {
+  public test(tests) {
     const self = this;
 
     if (!Array.isArray(tests) || typeof tests !== "object" || tests.length <= 0) {
@@ -95,7 +95,7 @@ module.exports = class {
           method:    test.method,
           reqdata:   test.reqdata,
           reqformat: test.reqformat,
-          uploads:   test.uploads
+          uploads:   test.uploads,
         });
       }
 
@@ -103,22 +103,22 @@ module.exports = class {
         test.db = [test.db];
       }
 
-      describe(test.url, function() {
+      describe(test.url, () => {
         this.timeout(5000);
 
-        it("should return " + test.status + " on " + test.method + " access (posting in " + test.reqformat + " format)", function(done) {
-          const dbtables = test.db.map(function(table) {
+        it("should return " + test.status + " on " + test.method + " access (posting in " + test.reqformat + " format)", (done) => {
+          const dbtables = test.db.map((table) => {
                   table.table = self.bookshelf.Model.extend({
-                    tableName: table.tablename
+                    tableName: table.tablename,
                   });
 
                   return table;
                 }),
-                models = dbtables.map(function(dbtable) {
+                models = dbtables.map((dbtable) => {
                   return dbtable.table;
                 });
 
-          self.cleanup(models).then(function() {
+          self.cleanup(models).then(() => {
             //
             // Before
             //
@@ -126,8 +126,8 @@ module.exports = class {
               return test.before();
             }
             return Promise.resolve();
-          }).then(function() {
-            return Promise.all(dbtables.map(function(table) {
+          }).then(() => {
+            return Promise.all(dbtables.map((table) => {
               //
               // Setup mock data
               //
@@ -140,22 +140,20 @@ module.exports = class {
               }
 
               // Insert mock data on DB
-              return Promise.all(
-                table.mock.data.map(function(record) {
-                  return new table.table(record).save({}, { method: "insert" });
-                })
-              );
+              return Promise.all(table.mock.data.map((record) => {
+                return new table.table(record).save({}, { method: "insert" });
+              }));
             }));
-          }).then(function() {
-            return Promise.all(dbtables.map(function(table) {
+          }).then(() => {
+            return Promise.all(dbtables.map((table) => {
               if (!(table.mock && table.mock.uploads)) {
                 return Promise.resolve();
               }
 
-              return Promise.all(table.mock.uploads.map(function(upload) {
-                return new Promise(function(resolve, reject) {
+              return Promise.all(table.mock.uploads.map((upload) => {
+                return new Promise((resolve, reject) => {
                   // Upload resources
-                  fs.copy(upload.src, path.join(self.uploadDir, upload.dest), function(err) {
+                  fs.copy(upload.src, path.join(self.uploadDir, upload.dest), (err) => {
                     if (err) {
                       reject(err);
                     }
@@ -165,7 +163,7 @@ module.exports = class {
               }));
             }));
             // End of Mockup Data generation
-          }).then(function() {
+          }).then(() => {
             //
             // Testing REST API
             //
@@ -182,16 +180,16 @@ module.exports = class {
             }
 
             return fetch(uri, {
-              method: test.method,
               body:   reqBody,
               header: {
-                "Content-Type": contentType
-              }
+                "Content-Type": contentType,
+              },
+              method: test.method,
             });
-          }).then(function(res) { // Assertion for response
+          }).then((res) => { // Assertion for response
             expect(res.status).to.be(test.status);
             return res.text();
-          }).then(function(body) {
+          }).then((body) => {
             // Skip if resdata is not defined
             // Note: Do NOT skip when test.resdata === null. `if (!test.resdata) {...` skips when resdata is defined as `null`
             if (typeof test.resdata === "undefined") {
@@ -202,29 +200,27 @@ module.exports = class {
               return Promise.resolve(JSON.parse(body));
             } catch (err) {
               if (err instanceof SyntaxError) {
-                return Promise.reject(
-                  "Response body is not JSON! Response body is:\n"
+                return Promise.reject("Response body is not JSON! Response body is:\n"
                   + "--------------------\n"
                   + body + "\n"
-                  + "--------------------\n"
-                );
+                  + "--------------------\n");
               } else {
                 return Promise.reject(err);
               }
             }
-          }).then(function(res) {
+          }).then((res) => {
             res.should.be.eql(test.resdata); // Use should.js for object comparison
 
-            return Promise.all(dbtables.map(function(table) {
+            return Promise.all(dbtables.map((table) => {
               // Assert dataset stored in DB
               if (!table.result || !table.result.data) {
                 return Promise.resolve();
               }
 
-              return table.table.fetchAll().then(function(_records) {
+              return table.table.fetchAll().then((_records) => {
                 const records = _records
                   .toJSON()
-                  .sort(function(record1, record2) {
+                  .sort((record1, record2) => {
                     return record1.id - record2.id;
                   });
 
@@ -251,20 +247,20 @@ module.exports = class {
                 //
                 // Assert uploaded files
                 //
-                return new Promise(function(resolve, reject) {
+                return new Promise((resolve, reject) => {
                   if (!table.result || !table.result.uploads) {
                     resolve();
                     return;
                   }
 
-                  table.result.uploads.forEach(function(upload) {
+                  table.result.uploads.forEach((upload) => {
                     const uploadedFileName = path.join(self.uploadDir, upload.filename);
 
                     imageDiff({
                       actualImage:   uploadedFileName,
+                      diffImage:     path.join(self.logDir, "images/diff"),
                       expectedImage: upload.original,
-                      diffImage:     path.join(self.logDir, "images/diff")
-                    }, function(err, imagesAreSame) {
+                    }, (err, imagesAreSame) => {
                       if (err) {
                         reject(err);
                       }
@@ -293,16 +289,16 @@ module.exports = class {
                 });
               });
             }));
-          }).then(function() {
+          }).then(() => {
             if (typeof test.after === "function") {
               return test.after();
             } else {
               return Promise.resolve();
             }
-          }).then(function() {
+          }).then(() => {
             done(); // eslint-disable-line promise/no-callback-in-promise
             return Promise.resolve();
-          }).catch(function(err) {
+          }).catch((err) => {
             should.ifError(err);
             done(err); // eslint-disable-line promise/no-callback-in-promise
             return Promise.reject(err);
@@ -312,14 +308,13 @@ module.exports = class {
     }
   }
 
-  // TODO Make private when rewriting in TypeScript
   /**
    * Cleanup existing data from directory and database
    *
    * @param  {Object} models Bookshelf model object
    * @returns {Promise} Promise object
    */
-  async cleanup(models) {
+  private async cleanup(models) {
     // Empty storage directory
     fs.emptyDirSync(this.uploadDir);
 
@@ -333,7 +328,6 @@ module.exports = class {
     return Promise.resolve();
   }
 
-  // TODO Make private when rewriting in TypeScript
   /**
    * Generate request body
    *
@@ -344,7 +338,7 @@ module.exports = class {
    * @param   {Object} [opts.uploads=undefined] Object of key-value pairs which expresses file name and path to dummy uploading file
    * @returns {string} request body to send
    */
-  genReqBody(opts) {
+  private genReqBody(opts) {
     const method = opts.method,
           reqdata = opts.reqdata,
           reqformat = opts.reqformat,
@@ -377,7 +371,7 @@ module.exports = class {
     // Prepare data to post/put
     //
     if (reqformat === "FORM") {
-      let reqBody = new FormData(); // eslint-disable-line prefer-const
+      const reqBody = new FormData();
 
       for (const key of Object.keys(reqdata)) {
         // Workaround: Node.js's form-data doesn't support array as form value, unlike browser implementation.
