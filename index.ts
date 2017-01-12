@@ -40,6 +40,8 @@ module.exports = class {
    * @param {string} config.db.name     Database name
    * @param {string} config.db.user     Database user name
    * @param {string} config.db.password Database password
+   * @param {string} config.uploadDir   Directory to store mock uploaded files
+   * @param {string} config.logDir      Directory to store logs
    */
   constructor(private config) {
     // Option assertion
@@ -48,10 +50,6 @@ module.exports = class {
     ) {
       throw new Error("Missing option value `endpoint`");
     }
-
-    this.endpoint = this.config.endpoint;
-    this.uploadDir = this.config && this.config.uploadDir ? this.config.uploadDir : null;
-    this.logDir = this.config && this.config.logDir ? this.config.logDir : null;
 
     // DB configuration
     if (typeof this.config.db === "object"
@@ -85,7 +83,7 @@ module.exports = class {
     }
 
     for (const test of tests) {
-      const uri = self.endpoint + test.url;
+      const uri = self.config.endpoint + test.url;
       let reqBody;
 
       if (test.method === "GET") {
@@ -153,7 +151,7 @@ module.exports = class {
               return Promise.all(table.mock.uploads.map((upload) => {
                 return new Promise((resolve, reject) => {
                   // Upload resources
-                  fs.copy(upload.src, path.join(self.uploadDir, upload.dest), (err) => {
+                  fs.copy(upload.src, path.join(self.config.uploadDir, upload.dest), (err) => {
                     if (err) {
                       reject(err);
                     }
@@ -254,11 +252,11 @@ module.exports = class {
                   }
 
                   table.result.uploads.forEach((upload) => {
-                    const uploadedFileName = path.join(self.uploadDir, upload.filename);
+                    const uploadedFileName = path.join(self.config.uploadDir, upload.filename);
 
                     imageDiff({
                       actualImage:   uploadedFileName,
-                      diffImage:     path.join(self.logDir, "images/diff"),
+                      diffImage:     path.join(self.config.logDir, "images/diff"),
                       expectedImage: upload.original,
                     }, (err, imagesAreSame) => {
                       if (err) {
@@ -316,7 +314,7 @@ module.exports = class {
    */
   private async cleanup(models) {
     // Empty storage directory
-    fs.emptyDirSync(this.uploadDir);
+    fs.emptyDirSync(this.config.uploadDir);
 
     for (const model of models) {
       // Remove existing records
