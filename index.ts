@@ -116,6 +116,15 @@ module.exports = class {
                   return dbtable.table;
                 });
 
+          // If there is mock.uploads in table, uploadDir and logDir must be specified
+          if (!self.config.uploadDir || !self.config.logDir) {
+            for (const dbtable of dbtables) {
+              if (dbtable.mock.uploads) {
+                throw new Error("uploadDir and logDir must be specified in constructor when test includes mock.uploads");
+              }
+            }
+          }
+
           self.cleanup(models).then(() => {
             //
             // Before
