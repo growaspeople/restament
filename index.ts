@@ -10,6 +10,22 @@ import * as fetch from "node-fetch";
 import * as path from "path";
 import * as should from "should";
 
+const enum HttpMethod {
+  GET,
+  POST,
+  PUT,
+  PATCH,
+  DELETE,
+  HEAD,
+  OPTIONS,
+  CONNECT,
+}
+
+const enum RequestFormat {
+  Form,
+  JSON,
+}
+
 module.exports = class {
   /**
    * Use `not` in db[].result.data to assert if values differ
@@ -83,20 +99,6 @@ module.exports = class {
     }
 
     for (const test of tests) {
-      const uri = self.config.endpoint + test.url;
-      let reqBody;
-
-      if (test.method === "GET") {
-        reqBody = null;
-      } else {
-        reqBody = self.genReqBody({
-          method:    test.method,
-          reqdata:   test.reqdata,
-          reqformat: test.reqformat,
-          uploads:   test.uploads,
-        });
-      }
-
       if (!Array.isArray(test.db)) {
         test.db = [test.db];
       }
@@ -136,52 +138,76 @@ module.exports = class {
           }).then(() => {
             return self.createMock(dbtables);
           }).then(() => {
-            //
-            // Testing REST API
-            //
-            let contentType;
+            let method,
+                reqBody,
+                reqformat;
 
-            if (test.reqformat === "JSON") {
-              contentType = "application/json";
-            } else if (test.reqformat === "FORM") {
-              if (test.uploads) {
-                contentType = "multipart/form-data";
-              } else {
-                contentType = "application/x-www-form-urlencoded";
-              }
+            switch (test.reqformat) {
+              case "FORM":
+                reqformat = RequestFormat.Form;
+                break;
+              case "JSON":
+                reqformat = RequestFormat.JSON;
+                break;
+              default:
+                return Promise.reject("reqformat only supports FORM and JSON; '" + test.reqformat + "'is not supported");
             }
 
-            return fetch(uri, {
-              body:   reqBody,
-              header: {
-                "Content-Type": contentType,
-              },
-              method: test.method,
-            });
-          }).then((res) => { // Assertion for response
-            expect(res.status).to.be(test.status);
-            return res.text();
-          }).then((body) => {
+            switch (test.method) {
+              case "GET":
+                method = HttpMethod.GET;
+                break;
+              case "POST":
+                method = HttpMethod.POST;
+                break;
+              case "PUT":
+                method = HttpMethod.PUT;
+                break;
+              case "PATCH":
+                method = HttpMethod.PATCH;
+                break;
+              case "DELETE":
+                method = HttpMethod.DELETE;
+                break;
+              case "HEAD":
+                method = HttpMethod.HEAD;
+                break;
+              case "OPTIONS":
+                method = HttpMethod.OPTIONS;
+                break;
+              case "CONNECT":
+                method = HttpMethod.CONNECT;
+                break;
+              default:
+                return Promise.reject("method '" + test.method + "'is not a HTTP method");
+            }
+
+            if (test.method === "GET") {
+              reqBody = null;
+            } else {
+              reqBody = self.genReqBody({
+                method:    test.method,
+                reqdata:   test.reqdata,
+                reqformat: test.reqformat,
+                uploads:   test.uploads,
+              });
+            }
+
+            return self.request(
+              test.url,
+              reqBody,
+              method,
+              reqformat,
+              (typeof test.uploads !== "undefined"),
+            );
+          }).then((response) => { // Assertion for response
+            expect(response.status).to.be(test.status);
+
             // Skip if resdata is not defined
             // Note: Do NOT skip when test.resdata === null. `if (!test.resdata) {...` skips when resdata is defined as `null`
-            if (typeof test.resdata === "undefined") {
-              return Promise.resolve();
+            if (typeof test.resdata !== "undefined") {
+              response.json.should.be.eql(test.resdata); // Use should.js for object comparison
             }
-
-            try {
-              return Promise.resolve(JSON.parse(body));
-            } catch (err) {
-              if (err instanceof SyntaxError) {
-                return Promise.reject("Response body is not JSON! Response body is:\n"
-                  + "--------------------\n"
-                  + body + "\n"
-                  + "--------------------\n");
-              } else {
-                return Promise.reject(err);
-              }
-            }
-          }).then((res) => {
-            res.should.be.eql(test.resdata); // Use should.js for object comparison
 
             return Promise.all(dbtables.map((table) => {
               // Assert dataset stored in DB
@@ -412,5 +438,50 @@ module.exports = class {
 
       return JSON.stringify(reqdata);
     }
+  }
+
+  private async request(url: string, reqBody: string, method: HttpMethod, reqformat: RequestFormat, upload: boolean = false) {
+    //
+    // Testing REST API
+    //
+    let contentType,
+        response: any = {};
+
+    if (reqformat === RequestFormat.JSON) {
+      contentType = "application/json";
+    } else if (reqformat === RequestFormat.Form) {
+      if (upload) {
+        contentType = "multipart/form-data";
+      } else {
+        contentType = "application/x-www-form-urlencoded";
+      }
+    }
+
+    return fetch(this.config.endpoint + url, {
+      body:   reqBody,
+      header: {
+        "Content-Type": contentType,
+      },
+      method: method,
+    }).then((res) => {
+      response.status = res.status;
+      return res.text();
+    }).then((body) => {
+      try {
+        response.json = JSON.parse(body);
+        return Promise.resolve();
+      } catch (err) {
+        if (err instanceof SyntaxError) {
+          return Promise.reject("Response body is not JSON! Response body is:\n"
+            + "--------------------\n"
+            + body + "\n"
+            + "--------------------\n");
+        } else {
+          return Promise.reject(err);
+        }
+      }
+    }).then(() => {
+      return Promise.resolve(response);
+    });
   }
 };
