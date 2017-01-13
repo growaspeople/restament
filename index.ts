@@ -134,42 +134,7 @@ module.exports = class {
             }
             return Promise.resolve();
           }).then(() => {
-            return Promise.all(dbtables.map((table) => {
-              //
-              // Setup mock data
-              //
-              if (!table.mock) {
-                return Promise.resolve();
-              }
-
-              if (!Array.isArray(table.mock.data)) {
-                table.mock.data = [table.mock.data];
-              }
-
-              // Insert mock data on DB
-              return Promise.all(table.mock.data.map((record) => {
-                return new table.table(record).save({}, { method: "insert" });
-              }));
-            }));
-          }).then(() => {
-            return Promise.all(dbtables.map((table) => {
-              if (!(table.mock && table.mock.uploads)) {
-                return Promise.resolve();
-              }
-
-              return Promise.all(table.mock.uploads.map((upload) => {
-                return new Promise((resolve, reject) => {
-                  // Upload resources
-                  fs.copy(upload.src, path.join(self.config.uploadDir, upload.dest), (err) => {
-                    if (err) {
-                      reject(err);
-                    }
-                    resolve();
-                  });
-                });
-              }));
-            }));
-            // End of Mockup Data generation
+            return self.createMock(dbtables);
           }).then(() => {
             //
             // Testing REST API
@@ -333,6 +298,53 @@ module.exports = class {
     }
 
     return Promise.resolve();
+  }
+
+  /**
+   * Create mock data
+   *
+   * @param {Object} dbtables dbtables object
+   * @returns {Promise<void>} Promise object
+   */
+  private async createMock(dbtables: any): Promise<void> {
+    const self = this;
+
+    dbtables.map((dbtable) => {
+      let procs: Array<Promise<void>> = [];
+
+      //
+      // Mock data (DB)
+      //
+      if (dbtable.mock) {
+        if (!Array.isArray(dbtable.mock.data)) {
+          dbtable.mock.data = [dbtable.mock.data];
+        }
+
+        // Insert mock data on DB
+        procs = procs.concat(procs, dbtable.mock.data.map((record) => {
+          return new dbtable.table(record).save({}, { method: "insert" });
+        }));
+      }
+
+      //
+      // Mock data (Upload files)
+      //
+      if (dbtable.mock && dbtable.mock.uploads) {
+        procs = procs.concat(procs, dbtable.mock.uploads.map((upload) => {
+          return new Promise((resolve, reject) => {
+            // Upload resources
+            fs.copy(upload.src, path.join(self.config.uploadDir, upload.dest), (err) => {
+              if (err) {
+                reject(err);
+              }
+              resolve();
+            });
+          });
+        }));
+      }
+
+      return Promise.all(procs);
+    });
   }
 
   /**
