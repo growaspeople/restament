@@ -10,14 +10,18 @@
     "fs-extra": "0.30.x",
     "image-diff": "1.x",
     "knex": "0.12.x",
-    "lodash": "4.x",
     "mysql": "2.x",
     "node-fetch": "1.x",
     "should": "11.x"
   },
   "devDependencies": {
+    "@types/bookshelf": "latest",
+    "@types/mocha": "latest",
+    "@types/node": "6.x",
     "eslint": "latest",
-    "eslint-config-growaspeople": "latest"
+    "eslint-config-growaspeople": "latest",
+    "tslint": "latest",
+    "typescript": "2.x"
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
