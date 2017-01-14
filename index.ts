@@ -209,80 +209,49 @@ module.exports = class {
               response.json.should.be.eql(test.resdata); // Use should.js for object comparison
             }
 
+            return self.assertDB(dbtables);
+          }).then(() => {
             return Promise.all(dbtables.map((table) => {
-              // Assert dataset stored in DB
-              if (!table.result || !table.result.data) {
-                return Promise.resolve();
-              }
-
-              return table.table.fetchAll().then((_records) => {
-                const records = _records
-                  .toJSON()
-                  .sort((record1, record2) => {
-                    return record1.id - record2.id;
-                  });
-
-                if (!Array.isArray(table.result.data)) {
-                  table.result.data = [table.result.data];
+              //
+              // Assert uploaded files
+              //
+              return new Promise((resolve, reject) => {
+                if (!table.result || !table.result.uploads) {
+                  resolve();
+                  return;
                 }
 
-                for (let i = 0; i < records.length; i++) {
-                  for (const key of Object.getOwnPropertyNames(table.result.data[i])) {
-                    const expectedColumnData = table.result.data[i][key],
-                          actualColumnData = records[i][key];
+                table.result.uploads.forEach((upload) => {
+                  const uploadedFileName = path.join(self.config.uploadDir, upload.filename);
 
-                    if (typeof expectedColumnData === "object" && expectedColumnData.type === "not") { // If Restament.not is expected
-                      expect(expectedColumnData).not.to.be(actualColumnData);
-                    } else if (typeof expectedColumnData === "function") {
-                      expect(expectedColumnData(actualColumnData)).to.be(true);
-                    } else { // expectedColumnData is literal
-                      // Check equality
-                      expect(actualColumnData).to.be(expectedColumnData);
+                  imageDiff({
+                    actualImage:   uploadedFileName,
+                    diffImage:     path.join(self.config.logDir, "images/diff"),
+                    expectedImage: upload.original,
+                  }, (err, imagesAreSame) => {
+                    if (err) {
+                      reject(err);
                     }
-                  }
-                }
 
-                //
-                // Assert uploaded files
-                //
-                return new Promise((resolve, reject) => {
-                  if (!table.result || !table.result.uploads) {
+                    // Save image if images doesn't match
+                    if (!imagesAreSame) {
+                      const resultDir = path.join(__dirname, "../tmp/images");
+
+                      if (fs.existsSync(uploadedFileName)) {
+                        fs.copySync(uploadedFileName, path.join(resultDir, "uploaded"));
+                      } else {
+                        reject(new Error(uploadedFileName + " doesn't exist!"));
+                      }
+
+                      if (fs.existsSync(upload.original)) {
+                        fs.copySync(upload.original, path.join(resultDir, "expected"));
+                      } else {
+                        reject(new Error(upload.original + " doesn't exist!"));
+                      }
+                    }
+
+                    expect(imagesAreSame).to.be(true);
                     resolve();
-                    return;
-                  }
-
-                  table.result.uploads.forEach((upload) => {
-                    const uploadedFileName = path.join(self.config.uploadDir, upload.filename);
-
-                    imageDiff({
-                      actualImage:   uploadedFileName,
-                      diffImage:     path.join(self.config.logDir, "images/diff"),
-                      expectedImage: upload.original,
-                    }, (err, imagesAreSame) => {
-                      if (err) {
-                        reject(err);
-                      }
-
-                      // Save image if images doesn't match
-                      if (!imagesAreSame) {
-                        const resultDir = path.join(__dirname, "../tmp/images");
-
-                        if (fs.existsSync(uploadedFileName)) {
-                          fs.copySync(uploadedFileName, path.join(resultDir, "uploaded"));
-                        } else {
-                          reject(new Error(uploadedFileName + " doesn't exist!"));
-                        }
-
-                        if (fs.existsSync(upload.original)) {
-                          fs.copySync(upload.original, path.join(resultDir, "expected"));
-                        } else {
-                          reject(new Error(upload.original + " doesn't exist!"));
-                        }
-                      }
-
-                      expect(imagesAreSame).to.be(true);
-                      resolve();
-                    });
                   });
                 });
               });
@@ -304,6 +273,51 @@ module.exports = class {
         });
       });
     }
+  }
+
+  /**
+   * Assert if expected data is stored on DB
+   *
+   * @param   {Object}  dbtables dbtables object
+   * @returns {Promise<void>} Promise object
+   */
+  private async assertDB(dbtables: any) {
+    return Promise.all(dbtables.map((table) => {
+      // Assert dataset stored in DB
+      if (!table.result || !table.result.data) {
+        return Promise.resolve();
+      }
+
+      return table.table.fetchAll().then((_records) => {
+        const records = _records
+          .toJSON()
+          .sort((record1, record2) => {
+            return record1.id - record2.id;
+          });
+
+        if (!Array.isArray(table.result.data)) {
+          table.result.data = [table.result.data];
+        }
+
+        for (let i = 0; i < records.length; i++) {
+          for (const key of Object.getOwnPropertyNames(table.result.data[i])) {
+            const expectedColumnData = table.result.data[i][key],
+                  actualColumnData = records[i][key];
+
+            if (typeof expectedColumnData === "object" && expectedColumnData.type === "not") { // If Restament.not is expected
+              expect(expectedColumnData).not.to.be(actualColumnData);
+            } else if (typeof expectedColumnData === "function") {
+              expect(expectedColumnData(actualColumnData)).to.be(true);
+            } else { // expectedColumnData is literal
+              // Check equality
+              expect(actualColumnData).to.be(expectedColumnData);
+            }
+          }
+        }
+
+        return Promise.resolve();
+      });
+    }));
   }
 
   /**
