@@ -209,53 +209,10 @@ module.exports = class {
               response.json.should.be.eql(test.resdata); // Use should.js for object comparison
             }
 
-            return self.assertDB(dbtables);
-          }).then(() => {
-            return Promise.all(dbtables.map((table) => {
-              //
-              // Assert uploaded files
-              //
-              return new Promise((resolve, reject) => {
-                if (!table.result || !table.result.uploads) {
-                  resolve();
-                  return;
-                }
-
-                table.result.uploads.forEach((upload) => {
-                  const uploadedFileName = path.join(self.config.uploadDir, upload.filename);
-
-                  imageDiff({
-                    actualImage:   uploadedFileName,
-                    diffImage:     path.join(self.config.logDir, "images/diff"),
-                    expectedImage: upload.original,
-                  }, (err, imagesAreSame) => {
-                    if (err) {
-                      reject(err);
-                    }
-
-                    // Save image if images doesn't match
-                    if (!imagesAreSame) {
-                      const resultDir = path.join(__dirname, "../tmp/images");
-
-                      if (fs.existsSync(uploadedFileName)) {
-                        fs.copySync(uploadedFileName, path.join(resultDir, "uploaded"));
-                      } else {
-                        reject(new Error(uploadedFileName + " doesn't exist!"));
-                      }
-
-                      if (fs.existsSync(upload.original)) {
-                        fs.copySync(upload.original, path.join(resultDir, "expected"));
-                      } else {
-                        reject(new Error(upload.original + " doesn't exist!"));
-                      }
-                    }
-
-                    expect(imagesAreSame).to.be(true);
-                    resolve();
-                  });
-                });
-              });
-            }));
+            return Promise.all([
+              self.assertDB(dbtables),
+              self.assertUploads(dbtables),
+            ]);
           }).then(() => {
             if (typeof test.after === "function") {
               return test.after();
@@ -316,6 +273,62 @@ module.exports = class {
         }
 
         return Promise.resolve();
+      });
+    }));
+  }
+
+  /**
+   * Assert if expected uploaded data is stored in the storage
+   *
+   * @param {Object} dbtables dbtables object
+   * @returns {Promise<void>} Promise object
+   */
+  private assertUploads(dbtables: any) {
+    const self = this;
+
+    return Promise.all(dbtables.map((table) => {
+      //
+      // Assert uploaded files
+      //
+      return new Promise((resolve, reject) => {
+        if (!table.result || !table.result.uploads) {
+          resolve();
+          return;
+        }
+
+        table.result.uploads.forEach((upload) => {
+          const uploadedFileName = path.join(self.config.uploadDir, upload.filename);
+
+          imageDiff({
+            actualImage:   uploadedFileName,
+            diffImage:     path.join(self.config.logDir, "images/diff"),
+            expectedImage: upload.original,
+          }, (err, imagesAreSame) => {
+            if (err) {
+              reject(err);
+            }
+
+            // Save image if images doesn't match
+            if (!imagesAreSame) {
+              const resultDir = path.join(__dirname, "../tmp/images");
+
+              if (fs.existsSync(uploadedFileName)) {
+                fs.copySync(uploadedFileName, path.join(resultDir, "uploaded"));
+              } else {
+                reject(new Error(uploadedFileName + " doesn't exist!"));
+              }
+
+              if (fs.existsSync(upload.original)) {
+                fs.copySync(upload.original, path.join(resultDir, "expected"));
+              } else {
+                reject(new Error(upload.original + " doesn't exist!"));
+              }
+            }
+
+            expect(imagesAreSame).to.be(true);
+            resolve();
+          });
+        });
       });
     }));
   }
