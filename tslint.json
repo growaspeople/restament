@@ -4,6 +4,7 @@
     "max-line-length": false,
     "no-duplicate-variable": true,
     "object-literal-shorthand": false,
+    "object-literal-sort-keys": false,
     "one-variable-per-declaration": false,
     "variable-name": [
       true,
