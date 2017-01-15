@@ -239,7 +239,6 @@ export class Restament {
    */
   private async assertDB(dbtables: any) {
     return Promise.all(dbtables.map((table) => {
-      // Assert dataset stored in DB
       if (!table.result || !table.result.data) {
         return Promise.resolve();
       }
@@ -297,9 +296,6 @@ export class Restament {
     const self = this;
 
     return Promise.all(dbtables.map((table) => {
-      //
-      // Assert uploaded files
-      //
       return new Promise((resolve, reject) => {
         if (!table.result || !table.result.uploads) {
           resolve();
