@@ -1,14 +1,14 @@
 "use strict";
 
+import * as assert from "assert";
 import * as Bookshelf from "bookshelf";
-import * as expect from "expect.js";
 import * as FormData from "form-data";
 import * as fs from "fs-extra";
 import * as imageDiff from "image-diff";
+import * as isPromise from "is-promise";
 import * as knex from "knex";
 import * as fetch from "node-fetch";
 import * as path from "path";
-import * as should from "should";
 
 const enum HttpMethod {
   GET,
@@ -87,148 +87,147 @@ export class Restament {
     }
   }
 
-  public test(tests) {
+  public async test(tests) {
     const self = this;
-
-    if (!Array.isArray(tests) || typeof tests !== "object" || tests.length <= 0) {
-      throw new Error("Test object has to be object or array of objects!");
-    }
 
     if (!Array.isArray(tests)) {
       tests = [tests];
     }
 
     for (const test of tests) {
+      if (typeof tests !== "object" || tests.length <= 0) {
+        throw new Error("Test object has to be object or array of objects!");
+      }
+
       if (!Array.isArray(test.db)) {
         test.db = [test.db];
       }
 
-      describe(test.url, () => {
-        this.timeout(5000);
-
-        it("should return " + test.status + " on " + test.method + " access (posting in " + test.reqformat + " format)", (done) => {
-          const dbtables = test.db.map((table) => {
-                  table.table = self.bookshelf.Model.extend({
-                    tableName: table.tablename,
-                  });
-
-                  return table;
-                }),
-                models = dbtables.map((dbtable) => {
-                  return dbtable.table;
-                });
-
-          // If there is mock.uploads in table, uploadDir and logDir must be specified
-          if (!self.config.uploadDir || !self.config.logDir) {
-            for (const dbtable of dbtables) {
-              if (dbtable.mock.uploads) {
-                throw new Error("uploadDir and logDir must be specified in constructor when test includes mock.uploads");
-              }
-            }
-          }
-
-          self.cleanup(models).then(() => {
-            //
-            // Before
-            //
-            if (typeof test.before === "function") {
-              return test.before();
-            }
-            return Promise.resolve();
-          }).then(() => {
-            return self.createMock(dbtables);
-          }).then(() => {
-            let method,
-                reqBody,
-                reqformat;
-
-            switch (test.reqformat) {
-              case "FORM":
-                reqformat = RequestFormat.Form;
-                break;
-              case "JSON":
-                reqformat = RequestFormat.JSON;
-                break;
-              default:
-                return Promise.reject("reqformat only supports FORM and JSON; '" + test.reqformat + "'is not supported");
-            }
-
-            switch (test.method) {
-              case "GET":
-                method = HttpMethod.GET;
-                break;
-              case "POST":
-                method = HttpMethod.POST;
-                break;
-              case "PUT":
-                method = HttpMethod.PUT;
-                break;
-              case "PATCH":
-                method = HttpMethod.PATCH;
-                break;
-              case "DELETE":
-                method = HttpMethod.DELETE;
-                break;
-              case "HEAD":
-                method = HttpMethod.HEAD;
-                break;
-              case "OPTIONS":
-                method = HttpMethod.OPTIONS;
-                break;
-              case "CONNECT":
-                method = HttpMethod.CONNECT;
-                break;
-              default:
-                return Promise.reject("method '" + test.method + "'is not a HTTP method");
-            }
-
-            if (test.method === "GET") {
-              reqBody = null;
-            } else {
-              reqBody = self.genReqBody({
-                method:    test.method,
-                reqdata:   test.reqdata,
-                reqformat: test.reqformat,
-                uploads:   test.uploads,
+      const title = test.url + "should return " + test.status + " on " + test.method + " access (posting in " + test.reqformat + " format)",
+            dbtables = test.db.map((table) => {
+              table.table = self.bookshelf.Model.extend({
+                tableName: table.tablename,
               });
-            }
 
-            return self.request(
-              test.url,
-              reqBody,
-              method,
-              reqformat,
-              (typeof test.uploads !== "undefined"),
-            );
-          }).then((response) => { // Assertion for response
-            expect(response.status).to.be(test.status);
+              return table;
+            }),
+            models = dbtables.map((dbtable) => {
+              return dbtable.table;
+            });
 
-            // Skip if resdata is not defined
-            // Note: Do NOT skip when test.resdata === null. `if (!test.resdata) {...` skips when resdata is defined as `null`
-            if (typeof test.resdata !== "undefined") {
-              response.json.should.be.eql(test.resdata); // Use should.js for object comparison
-            }
+      // If there is mock.uploads in table, uploadDir and logDir must be specified
+      if (!self.config.uploadDir || !self.config.logDir) {
+        for (const dbtable of dbtables) {
+          if (dbtable.mock.uploads) {
+            throw new Error("uploadDir and logDir must be specified in constructor when test includes mock.uploads");
+          }
+        }
+      }
 
-            return Promise.all([
-              self.assertDB(dbtables),
-              self.assertUploads(dbtables),
-            ]);
-          }).then(() => {
-            if (typeof test.after === "function") {
-              return test.after();
-            } else {
-              return Promise.resolve();
-            }
-          }).then(() => {
-            done(); // eslint-disable-line promise/no-callback-in-promise
-            return Promise.resolve();
-          }).catch((err) => {
-            should.ifError(err);
-            done(err); // eslint-disable-line promise/no-callback-in-promise
-            return Promise.reject(err);
-          });
+      await self.cleanup(models);
+
+      if (typeof test.before === "function") {
+        const beforeResult = test.before();
+
+        if (isPromise(beforeResult)) {
+          await beforeResult;
+        }
+      }
+
+      await self.createMock(dbtables);
+
+      let method,
+          reqBody,
+          reqformat;
+
+      switch (test.reqformat) {
+        case "FORM":
+          reqformat = RequestFormat.Form;
+          break;
+        case "JSON":
+          reqformat = RequestFormat.JSON;
+          break;
+        default:
+          throw new Error("reqformat only supports FORM and JSON; '" + test.reqformat + "'is not supported");
+      }
+
+      switch (test.method) {
+        case "GET":
+          method = HttpMethod.GET;
+          break;
+        case "POST":
+          method = HttpMethod.POST;
+          break;
+        case "PUT":
+          method = HttpMethod.PUT;
+          break;
+        case "PATCH":
+          method = HttpMethod.PATCH;
+          break;
+        case "DELETE":
+          method = HttpMethod.DELETE;
+          break;
+        case "HEAD":
+          method = HttpMethod.HEAD;
+          break;
+        case "OPTIONS":
+          method = HttpMethod.OPTIONS;
+          break;
+        case "CONNECT":
+          method = HttpMethod.CONNECT;
+          break;
+        default:
+          throw new Error("method '" + test.method + "'is not a HTTP method");
+      }
+
+      if (test.method === "GET") {
+        reqBody = null;
+      } else {
+        reqBody = self.genReqBody({
+          method:    test.method,
+          reqdata:   test.reqdata,
+          reqformat: test.reqformat,
+          uploads:   test.uploads,
         });
-      });
+      }
+
+      const response = await self.request(
+        test.url,
+        reqBody,
+        method,
+        reqformat,
+        (typeof test.uploads !== "undefined"),
+      );
+
+      // Assert status code
+      if (response.status !== test.status) {
+        throw new Error("Assertion Error: Status Code is expected to be \'" +
+          test.status + "\' but returned \'" + response.status + "\'");
+      }
+
+      // Skip if resdata is not defined
+      // Note: Do NOT skip when test.resdata === null. `if (!test.resdata) {...` skips when resdata is defined as `null`
+      if (typeof test.resdata !== "undefined") {
+        try {
+          assert.deepStrictEqual(response.json, test.resdata);
+        } catch (err) {
+          throw new Error("Assertion Error: response data (resdata) is expected to be: \n" +
+            test.resdata + "\n but returned: \n" + response.json);
+        }
+      }
+
+      await Promise.all([
+        self.assertDB(dbtables),
+        self.assertUploads(dbtables),
+      ]);
+
+      if (typeof test.after === "function") {
+        const afterResult = test.after();
+
+        if (isPromise(afterResult)) {
+          await afterResult;
+        }
+      }
     }
   }
 
@@ -240,7 +239,6 @@ export class Restament {
    */
   private async assertDB(dbtables: any) {
     return Promise.all(dbtables.map((table) => {
-      // Assert dataset stored in DB
       if (!table.result || !table.result.data) {
         return Promise.resolve();
       }
@@ -262,12 +260,23 @@ export class Restament {
                   actualColumnData = records[i][key];
 
             if (typeof expectedColumnData === "object" && expectedColumnData.type === "not") { // If Restament.not is expected
-              expect(expectedColumnData).not.to.be(actualColumnData);
+              if (expectedColumnData.values === actualColumnData) {
+                return Promise.reject("Assertion Error: data[" + i + "][" + key + "]"
+                  + " is expected NOT to be \'" + expectedColumnData.values + "\'");
+              }
             } else if (typeof expectedColumnData === "function") {
-              expect(expectedColumnData(actualColumnData)).to.be(true);
+              if (expectedColumnData(actualColumnData) !== true) {
+                return Promise.reject("Assertion Error: data[" + i + "][" + key + "]"
+                  + " is expected to pass test function but actual data \'"
+                  + actualColumnData + "\' didn't pass");
+              }
             } else { // expectedColumnData is literal
               // Check equality
-              expect(actualColumnData).to.be(expectedColumnData);
+              if (expectedColumnData !== actualColumnData) {
+                return Promise.reject("Assertion Error: data[" + i + "][" + key + "]"
+                  + " is expected to be \'" + expectedColumnData + "\' but actually \'"
+                  + actualColumnData + "\'");
+              }
             }
           }
         }
@@ -287,9 +296,6 @@ export class Restament {
     const self = this;
 
     return Promise.all(dbtables.map((table) => {
-      //
-      // Assert uploaded files
-      //
       return new Promise((resolve, reject) => {
         if (!table.result || !table.result.uploads) {
           resolve();
@@ -310,22 +316,35 @@ export class Restament {
 
             // Save image if images doesn't match
             if (!imagesAreSame) {
-              const resultDir = path.join(__dirname, "../tmp/images");
+              const resultDir = path.join(__dirname, "../tmp/images"),
+                    uploadedFileExists = fs.existsSync(uploadedFileName),
+                    originalExists = fs.existsSync(upload.original);
 
-              if (fs.existsSync(uploadedFileName)) {
+              if (uploadedFileExists) {
                 fs.copySync(uploadedFileName, path.join(resultDir, "uploaded"));
-              } else {
-                reject(new Error(uploadedFileName + " doesn't exist!"));
               }
 
-              if (fs.existsSync(upload.original)) {
+              if (originalExists) {
                 fs.copySync(upload.original, path.join(resultDir, "expected"));
+              }
+
+              if (!uploadedFileExists && !originalExists) {
+                reject("Assertion Error: uploaded file '" + uploadedFileName
+                  + "' and original file '" + upload.original + "' doesn't exist!");
+                return;
+              } else if (!uploadedFileExists) {
+                reject("Assertion Error: uploaded file '" + uploadedFileName + "' doesn't exist!");
+                return;
+              } else if (!originalExists) {
+                reject("Assertion Error: '" + upload.original + "' doesn't exist!");
+                return;
               } else {
-                reject(new Error(upload.original + " doesn't exist!"));
+                reject("Assertion Error: uploaded file '" + uploadedFileName
+                  + "' and original file '" + upload.original + "' are expected to be the same, but they differs.");
+                return;
               }
             }
 
-            expect(imagesAreSame).to.be(true);
             resolve();
           });
         });
