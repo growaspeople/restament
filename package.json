@@ -5,14 +5,12 @@
   "main": "index.js",
   "dependencies": {
     "bookshelf": "0.10.x",
-    "expect.js": "0.3.x",
     "form-data": "1.0.x",
     "fs-extra": "0.30.x",
     "image-diff": "1.x",
     "knex": "0.12.x",
     "mysql": "2.x",
-    "node-fetch": "1.x",
-    "should": "11.x"
+    "node-fetch": "1.x"
   },
   "devDependencies": {
     "@types/bookshelf": "latest",

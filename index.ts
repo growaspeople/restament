@@ -1,14 +1,13 @@
 "use strict";
 
+import * as assert from "assert";
 import * as Bookshelf from "bookshelf";
-import * as expect from "expect.js";
 import * as FormData from "form-data";
 import * as fs from "fs-extra";
 import * as imageDiff from "image-diff";
 import * as knex from "knex";
 import * as fetch from "node-fetch";
 import * as path from "path";
-import * as should from "should";
 
 const enum HttpMethod {
   GET,
@@ -198,12 +197,21 @@ export class Restament {
           (typeof test.uploads !== "undefined"),
         );
       }).then((response) => { // Assertion for response
-        expect(response.status).to.be(test.status);
+        // Assert status code
+        if (response.status !== test.status) {
+          return Promise.reject("Assertion Error: Status Code is expected to be \'" +
+            test.status + "\' but returned \'" + response.status + "\'");
+        }
 
         // Skip if resdata is not defined
         // Note: Do NOT skip when test.resdata === null. `if (!test.resdata) {...` skips when resdata is defined as `null`
         if (typeof test.resdata !== "undefined") {
-          response.json.should.be.eql(test.resdata); // Use should.js for object comparison
+          try {
+            assert.deepStrictEqual(response.json, test.resdata);
+          } catch (err) {
+            return Promise.reject("Assertion Error: response data (resdata) is expected to be: \n" +
+              test.resdata + "\n but returned: \n" + response.json);
+          }
         }
 
         return Promise.all([
@@ -219,7 +227,7 @@ export class Restament {
       }).then(() => {
         return Promise.resolve();
       }).catch((err) => {
-        should.ifError(err);
+        console.error(err);
         return Promise.reject(err);
       });
     }
@@ -255,12 +263,23 @@ export class Restament {
                   actualColumnData = records[i][key];
 
             if (typeof expectedColumnData === "object" && expectedColumnData.type === "not") { // If Restament.not is expected
-              expect(expectedColumnData).not.to.be(actualColumnData);
+              if (expectedColumnData.values === actualColumnData) {
+                return Promise.reject("Assertion Error: data[" + i + "][" + key + "]"
+                  + " is expected NOT to be \'" + expectedColumnData.values + "\'");
+              }
             } else if (typeof expectedColumnData === "function") {
-              expect(expectedColumnData(actualColumnData)).to.be(true);
+              if (expectedColumnData(actualColumnData) !== true) {
+                return Promise.reject("Assertion Error: data[" + i + "][" + key + "]"
+                  + " is expected to pass test function but actual data \'"
+                  + actualColumnData + "\' didn't pass");
+              }
             } else { // expectedColumnData is literal
               // Check equality
-              expect(actualColumnData).to.be(expectedColumnData);
+              if (expectedColumnData !== actualColumnData) {
+                return Promise.reject("Assertion Error: data[" + i + "][" + key + "]"
+                  + " is expected to be \'" + expectedColumnData + "\' but actually \'"
+                  + actualColumnData + "\'");
+              }
             }
           }
         }
@@ -303,22 +322,35 @@ export class Restament {
 
             // Save image if images doesn't match
             if (!imagesAreSame) {
-              const resultDir = path.join(__dirname, "../tmp/images");
+              const resultDir = path.join(__dirname, "../tmp/images"),
+                    uploadedFileExists = fs.existsSync(uploadedFileName),
+                    originalExists = fs.existsSync(upload.original);
 
-              if (fs.existsSync(uploadedFileName)) {
+              if (uploadedFileExists) {
                 fs.copySync(uploadedFileName, path.join(resultDir, "uploaded"));
-              } else {
-                reject(new Error(uploadedFileName + " doesn't exist!"));
               }
 
-              if (fs.existsSync(upload.original)) {
+              if (originalExists) {
                 fs.copySync(upload.original, path.join(resultDir, "expected"));
+              }
+
+              if (!uploadedFileExists && !originalExists) {
+                reject("Assertion Error: uploaded file '" + uploadedFileName
+                  + "' and original file '" + upload.original + "' doesn't exist!");
+                return;
+              } else if (!uploadedFileExists) {
+                reject("Assertion Error: uploaded file '" + uploadedFileName + "' doesn't exist!");
+                return;
+              } else if (!originalExists) {
+                reject("Assertion Error: '" + upload.original + "' doesn't exist!");
+                return;
               } else {
-                reject(new Error(upload.original + " doesn't exist!"));
+                reject("Assertion Error: uploaded file '" + uploadedFileName
+                  + "' and original file '" + upload.original + "' are expected to be the same, but they differs.");
+                return;
               }
             }
 
-            expect(imagesAreSame).to.be(true);
             resolve();
           });
         });
