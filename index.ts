@@ -26,7 +26,7 @@ const enum RequestFormat {
   JSON,
 }
 
-module.exports = class {
+export class Restament {
   /**
    * Use `not` in db[].result.data to assert if values differ
    * @return {object} Restament's `not` object
