@@ -224,8 +224,6 @@ export class Restament {
         } else {
           return Promise.resolve();
         }
-      }).then(() => {
-        return Promise.resolve();
       }).catch((err) => {
         console.error(err);
         return Promise.reject(err);
