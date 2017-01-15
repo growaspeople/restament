@@ -10,7 +10,7 @@ import * as knex from "knex";
 import * as fetch from "node-fetch";
 import * as path from "path";
 
-const enum HttpMethod {
+enum HttpMethod {
   GET,
   POST,
   PUT,
@@ -21,8 +21,8 @@ const enum HttpMethod {
   CONNECT,
 }
 
-const enum RequestFormat {
-  Form,
+enum RequestFormat {
+  FORM,
   JSON,
 }
 
@@ -46,6 +46,7 @@ export class Restament {
 
   /** Bookshelf instance */
   private bookshelf: Bookshelf;
+  private Models: any; // tslint:disable-line:variable-name // TODO Type definition
 
   /**
    * Constructor for Restament
@@ -87,8 +88,33 @@ export class Restament {
     }
   }
 
-  public async test(tests) {
+  public async test(tests: Array<{
+    url: string,
+    method: string,
+    reqformat: string,
+    reqdata: any,
+    uploads: any,
+    status: number,
+    resdata: any,
+    db: Array<{
+      tablename: string,
+      mock: {
+        data: any,
+        uploads: any,
+      },
+      result: {
+        data: any,
+        uploads: Array<{
+          filename: string,
+          original: string,
+        }>,
+      },
+    }>,
+    before: () => void,
+    after: () => void,
+  }>) {
     const self = this;
+    let reqBody;
 
     if (!Array.isArray(tests)) {
       tests = [tests];
@@ -99,32 +125,31 @@ export class Restament {
         throw new Error("Test object has to be object or array of objects!");
       }
 
-      if (!Array.isArray(test.db)) {
-        test.db = [test.db];
+      // TODO If possible support non-array type
+      // if (!Array.isArray(test.db)) {
+      //   test.db = [test.db];
+      // }
+
+      const title = test.url + "should return " + test.status + " on " + test.method + " access (posting in " + test.reqformat + " format)";
+
+      for (const table of test.db) {
+        if (!self.Models[table.tablename]) {
+          self.Models[table.tablename] = self.bookshelf.Model.extend({
+            tableName: table.tablename,
+          });
+        }
       }
-
-      const title = test.url + "should return " + test.status + " on " + test.method + " access (posting in " + test.reqformat + " format)",
-            dbtables = test.db.map((table) => {
-              table.table = self.bookshelf.Model.extend({
-                tableName: table.tablename,
-              });
-
-              return table;
-            }),
-            models = dbtables.map((dbtable) => {
-              return dbtable.table;
-            });
 
       // If there is mock.uploads in table, uploadDir and logDir must be specified
       if (!self.config.uploadDir || !self.config.logDir) {
-        for (const dbtable of dbtables) {
-          if (dbtable.mock.uploads) {
+        for (const table of test.db) {
+          if (table.mock.uploads) {
             throw new Error("uploadDir and logDir must be specified in constructor when test includes mock.uploads");
           }
         }
       }
 
-      await self.cleanup(models);
+      await self.cleanup(test.db);
 
       if (typeof test.before === "function") {
         const beforeResult = test.before();
@@ -134,51 +159,7 @@ export class Restament {
         }
       }
 
-      await self.createMock(dbtables);
-
-      let method,
-          reqBody,
-          reqformat;
-
-      switch (test.reqformat) {
-        case "FORM":
-          reqformat = RequestFormat.Form;
-          break;
-        case "JSON":
-          reqformat = RequestFormat.JSON;
-          break;
-        default:
-          throw new Error("reqformat only supports FORM and JSON; '" + test.reqformat + "'is not supported");
-      }
-
-      switch (test.method) {
-        case "GET":
-          method = HttpMethod.GET;
-          break;
-        case "POST":
-          method = HttpMethod.POST;
-          break;
-        case "PUT":
-          method = HttpMethod.PUT;
-          break;
-        case "PATCH":
-          method = HttpMethod.PATCH;
-          break;
-        case "DELETE":
-          method = HttpMethod.DELETE;
-          break;
-        case "HEAD":
-          method = HttpMethod.HEAD;
-          break;
-        case "OPTIONS":
-          method = HttpMethod.OPTIONS;
-          break;
-        case "CONNECT":
-          method = HttpMethod.CONNECT;
-          break;
-        default:
-          throw new Error("method '" + test.method + "'is not a HTTP method");
-      }
+      await self.createMock(test.db);
 
       if (test.method === "GET") {
         reqBody = null;
@@ -194,8 +175,8 @@ export class Restament {
       const response = await self.request(
         test.url,
         reqBody,
-        method,
-        reqformat,
+        HttpMethod[test.method.toUpperCase()],
+        RequestFormat[test.reqformat.toUpperCase()],
         (typeof test.uploads !== "undefined"),
       );
 
@@ -217,8 +198,8 @@ export class Restament {
       }
 
       await Promise.all([
-        self.assertDB(dbtables),
-        self.assertUploads(dbtables),
+        self.assertDB(test.db),
+        self.assertUploads(test.db),
       ]);
 
       if (typeof test.after === "function") {
@@ -237,13 +218,28 @@ export class Restament {
    * @param   {Object}  dbtables dbtables object
    * @returns {Promise<void>} Promise object
    */
-  private async assertDB(dbtables: any) {
-    return Promise.all(dbtables.map((table) => {
+  private async assertDB(tables: Array<{
+    tablename: string,
+    mock: {
+      data: any,
+      uploads: any,
+    },
+    result: {
+      data: any,
+      uploads: Array<{
+        filename: string,
+        original: string,
+      }>,
+    },
+  }>) {
+    const self = this;
+
+    return Promise.all(tables.map((table) => {
       if (!table.result || !table.result.data) {
         return Promise.resolve();
       }
 
-      return table.table.fetchAll().then((_records) => {
+      return self.Models[table.tablename].fetchAll().then((_records) => {
         const records = _records
           .toJSON()
           .sort((record1, record2) => {
@@ -292,10 +288,23 @@ export class Restament {
    * @param {Object} dbtables dbtables object
    * @returns {Promise<void>} Promise object
    */
-  private assertUploads(dbtables: any) {
+  private assertUploads(tables: Array<{
+    tablename: string,
+    mock: {
+      data: any,
+      uploads: any,
+    },
+    result: {
+      data: any,
+      uploads: Array<{
+        filename: string,
+        original: string,
+      }>,
+    },
+  }>) {
     const self = this;
 
-    return Promise.all(dbtables.map((table) => {
+    return Promise.all(tables.map((table) => {
       return new Promise((resolve, reject) => {
         if (!table.result || !table.result.uploads) {
           resolve();
@@ -378,31 +387,44 @@ export class Restament {
    * @param {Object} dbtables dbtables object
    * @returns {Promise<void>} Promise object
    */
-  private async createMock(dbtables: any): Promise<void> {
+  private async createMock(tables: Array<{
+    tablename: string,
+    mock: {
+      data: any,
+      uploads: any,
+    },
+    result: {
+      data: any,
+      uploads: Array<{
+        filename: string,
+        original: string,
+      }>,
+    },
+  }>): Promise<void> {
     const self = this;
 
-    dbtables.map((dbtable) => {
+    tables.map((table) => {
       let procs: Array<Promise<void>> = [];
 
       //
       // Mock data (DB)
       //
-      if (dbtable.mock) {
-        if (!Array.isArray(dbtable.mock.data)) {
-          dbtable.mock.data = [dbtable.mock.data];
+      if (table.mock) {
+        if (!Array.isArray(table.mock.data)) {
+          table.mock.data = [table.mock.data];
         }
 
         // Insert mock data on DB
-        procs = procs.concat(procs, dbtable.mock.data.map((record) => {
-          return new dbtable.table(record).save({}, { method: "insert" });
+        procs = procs.concat(procs, table.mock.data.map((record) => {
+          return new self.Models[table.tablename](record).save({}, { method: "insert" });
         }));
       }
 
       //
       // Mock data (Upload files)
       //
-      if (dbtable.mock && dbtable.mock.uploads) {
-        procs = procs.concat(procs, dbtable.mock.uploads.map((upload) => {
+      if (table.mock && table.mock.uploads) {
+        procs = procs.concat(procs, table.mock.uploads.map((upload) => {
           return new Promise((resolve, reject) => {
             // Upload resources
             fs.copy(upload.src, path.join(self.config.uploadDir, upload.dest), (err) => {
@@ -493,14 +515,20 @@ export class Restament {
     let contentType,
         response: any = {};
 
+    if (typeof method === "undefined") {
+      throw new Error("Unsupported HTTP method");
+    }
+
     if (reqformat === RequestFormat.JSON) {
       contentType = "application/json";
-    } else if (reqformat === RequestFormat.Form) {
+    } else if (reqformat === RequestFormat.FORM) {
       if (upload) {
         contentType = "multipart/form-data";
       } else {
         contentType = "application/x-www-form-urlencoded";
       }
+    } else { // if (typeof reqformat === "undefined")
+      throw new Error("Unsupported reqformat; only supports FORM and JSON");
     }
 
     return fetch(this.config.endpoint + url, {
