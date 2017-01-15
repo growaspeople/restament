@@ -16,7 +16,6 @@
   },
   "devDependencies": {
     "@types/bookshelf": "latest",
-    "@types/mocha": "latest",
     "@types/node": "6.x",
     "eslint": "latest",
     "eslint-config-growaspeople": "latest",

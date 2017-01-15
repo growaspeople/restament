@@ -103,131 +103,124 @@ export class Restament {
         test.db = [test.db];
       }
 
-      describe(test.url, () => {
-        this.timeout(5000);
-
-        it("should return " + test.status + " on " + test.method + " access (posting in " + test.reqformat + " format)", (done) => {
-          const dbtables = test.db.map((table) => {
-                  table.table = self.bookshelf.Model.extend({
-                    tableName: table.tablename,
-                  });
-
-                  return table;
-                }),
-                models = dbtables.map((dbtable) => {
-                  return dbtable.table;
-                });
-
-          // If there is mock.uploads in table, uploadDir and logDir must be specified
-          if (!self.config.uploadDir || !self.config.logDir) {
-            for (const dbtable of dbtables) {
-              if (dbtable.mock.uploads) {
-                throw new Error("uploadDir and logDir must be specified in constructor when test includes mock.uploads");
-              }
-            }
-          }
-
-          self.cleanup(models).then(() => {
-            //
-            // Before
-            //
-            if (typeof test.before === "function") {
-              return test.before();
-            }
-            return Promise.resolve();
-          }).then(() => {
-            return self.createMock(dbtables);
-          }).then(() => {
-            let method,
-                reqBody,
-                reqformat;
-
-            switch (test.reqformat) {
-              case "FORM":
-                reqformat = RequestFormat.Form;
-                break;
-              case "JSON":
-                reqformat = RequestFormat.JSON;
-                break;
-              default:
-                return Promise.reject("reqformat only supports FORM and JSON; '" + test.reqformat + "'is not supported");
-            }
-
-            switch (test.method) {
-              case "GET":
-                method = HttpMethod.GET;
-                break;
-              case "POST":
-                method = HttpMethod.POST;
-                break;
-              case "PUT":
-                method = HttpMethod.PUT;
-                break;
-              case "PATCH":
-                method = HttpMethod.PATCH;
-                break;
-              case "DELETE":
-                method = HttpMethod.DELETE;
-                break;
-              case "HEAD":
-                method = HttpMethod.HEAD;
-                break;
-              case "OPTIONS":
-                method = HttpMethod.OPTIONS;
-                break;
-              case "CONNECT":
-                method = HttpMethod.CONNECT;
-                break;
-              default:
-                return Promise.reject("method '" + test.method + "'is not a HTTP method");
-            }
-
-            if (test.method === "GET") {
-              reqBody = null;
-            } else {
-              reqBody = self.genReqBody({
-                method:    test.method,
-                reqdata:   test.reqdata,
-                reqformat: test.reqformat,
-                uploads:   test.uploads,
+      const title = test.url + "should return " + test.status + " on " + test.method + " access (posting in " + test.reqformat + " format)",
+            dbtables = test.db.map((table) => {
+              table.table = self.bookshelf.Model.extend({
+                tableName: table.tablename,
               });
-            }
 
-            return self.request(
-              test.url,
-              reqBody,
-              method,
-              reqformat,
-              (typeof test.uploads !== "undefined"),
-            );
-          }).then((response) => { // Assertion for response
-            expect(response.status).to.be(test.status);
+              return table;
+            }),
+            models = dbtables.map((dbtable) => {
+              return dbtable.table;
+            });
 
-            // Skip if resdata is not defined
-            // Note: Do NOT skip when test.resdata === null. `if (!test.resdata) {...` skips when resdata is defined as `null`
-            if (typeof test.resdata !== "undefined") {
-              response.json.should.be.eql(test.resdata); // Use should.js for object comparison
-            }
+      // If there is mock.uploads in table, uploadDir and logDir must be specified
+      if (!self.config.uploadDir || !self.config.logDir) {
+        for (const dbtable of dbtables) {
+          if (dbtable.mock.uploads) {
+            throw new Error("uploadDir and logDir must be specified in constructor when test includes mock.uploads");
+          }
+        }
+      }
 
-            return Promise.all([
-              self.assertDB(dbtables),
-              self.assertUploads(dbtables),
-            ]);
-          }).then(() => {
-            if (typeof test.after === "function") {
-              return test.after();
-            } else {
-              return Promise.resolve();
-            }
-          }).then(() => {
-            done(); // eslint-disable-line promise/no-callback-in-promise
-            return Promise.resolve();
-          }).catch((err) => {
-            should.ifError(err);
-            done(err); // eslint-disable-line promise/no-callback-in-promise
-            return Promise.reject(err);
+      self.cleanup(models).then(() => {
+        //
+        // Before
+        //
+        if (typeof test.before === "function") {
+          return test.before();
+        }
+        return Promise.resolve();
+      }).then(() => {
+        return self.createMock(dbtables);
+      }).then(() => {
+        let method,
+            reqBody,
+            reqformat;
+
+        switch (test.reqformat) {
+          case "FORM":
+            reqformat = RequestFormat.Form;
+            break;
+          case "JSON":
+            reqformat = RequestFormat.JSON;
+            break;
+          default:
+            return Promise.reject("reqformat only supports FORM and JSON; '" + test.reqformat + "'is not supported");
+        }
+
+        switch (test.method) {
+          case "GET":
+            method = HttpMethod.GET;
+            break;
+          case "POST":
+            method = HttpMethod.POST;
+            break;
+          case "PUT":
+            method = HttpMethod.PUT;
+            break;
+          case "PATCH":
+            method = HttpMethod.PATCH;
+            break;
+          case "DELETE":
+            method = HttpMethod.DELETE;
+            break;
+          case "HEAD":
+            method = HttpMethod.HEAD;
+            break;
+          case "OPTIONS":
+            method = HttpMethod.OPTIONS;
+            break;
+          case "CONNECT":
+            method = HttpMethod.CONNECT;
+            break;
+          default:
+            return Promise.reject("method '" + test.method + "'is not a HTTP method");
+        }
+
+        if (test.method === "GET") {
+          reqBody = null;
+        } else {
+          reqBody = self.genReqBody({
+            method:    test.method,
+            reqdata:   test.reqdata,
+            reqformat: test.reqformat,
+            uploads:   test.uploads,
           });
-        });
+        }
+
+        return self.request(
+          test.url,
+          reqBody,
+          method,
+          reqformat,
+          (typeof test.uploads !== "undefined"),
+        );
+      }).then((response) => { // Assertion for response
+        expect(response.status).to.be(test.status);
+
+        // Skip if resdata is not defined
+        // Note: Do NOT skip when test.resdata === null. `if (!test.resdata) {...` skips when resdata is defined as `null`
+        if (typeof test.resdata !== "undefined") {
+          response.json.should.be.eql(test.resdata); // Use should.js for object comparison
+        }
+
+        return Promise.all([
+          self.assertDB(dbtables),
+          self.assertUploads(dbtables),
+        ]);
+      }).then(() => {
+        if (typeof test.after === "function") {
+          return test.after();
+        } else {
+          return Promise.resolve();
+        }
+      }).then(() => {
+        return Promise.resolve();
+      }).catch((err) => {
+        should.ifError(err);
+        return Promise.reject(err);
       });
     }
   }
