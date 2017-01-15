@@ -90,15 +90,15 @@ export class Restament {
   public test(tests) {
     const self = this;
 
-    if (!Array.isArray(tests) || typeof tests !== "object" || tests.length <= 0) {
-      throw new Error("Test object has to be object or array of objects!");
-    }
-
     if (!Array.isArray(tests)) {
       tests = [tests];
     }
 
     for (const test of tests) {
+      if (typeof tests !== "object" || tests.length <= 0) {
+        throw new Error("Test object has to be object or array of objects!");
+      }
+
       if (!Array.isArray(test.db)) {
         test.db = [test.db];
       }
