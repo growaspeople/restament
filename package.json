@@ -8,6 +8,7 @@
     "form-data": "1.0.x",
     "fs-extra": "0.30.x",
     "image-diff": "1.x",
+    "is-promise": "^2.1.0",
     "knex": "0.12.x",
     "mysql": "2.x",
     "node-fetch": "1.x"

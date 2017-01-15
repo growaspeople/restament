@@ -5,6 +5,7 @@ import * as Bookshelf from "bookshelf";
 import * as FormData from "form-data";
 import * as fs from "fs-extra";
 import * as imageDiff from "image-diff";
+import * as isPromise from "is-promise";
 import * as knex from "knex";
 import * as fetch from "node-fetch";
 import * as path from "path";
@@ -86,7 +87,7 @@ export class Restament {
     }
   }
 
-  public test(tests) {
+  public async test(tests) {
     const self = this;
 
     if (!Array.isArray(tests)) {
@@ -123,111 +124,110 @@ export class Restament {
         }
       }
 
-      self.cleanup(models).then(() => {
-        //
-        // Before
-        //
-        if (typeof test.before === "function") {
-          return test.before();
-        }
-        return Promise.resolve();
-      }).then(() => {
-        return self.createMock(dbtables);
-      }).then(() => {
-        let method,
-            reqBody,
-            reqformat;
+      await self.cleanup(models);
 
-        switch (test.reqformat) {
-          case "FORM":
-            reqformat = RequestFormat.Form;
-            break;
-          case "JSON":
-            reqformat = RequestFormat.JSON;
-            break;
-          default:
-            return Promise.reject("reqformat only supports FORM and JSON; '" + test.reqformat + "'is not supported");
-        }
+      if (typeof test.before === "function") {
+        const beforeResult = test.before();
 
-        switch (test.method) {
-          case "GET":
-            method = HttpMethod.GET;
-            break;
-          case "POST":
-            method = HttpMethod.POST;
-            break;
-          case "PUT":
-            method = HttpMethod.PUT;
-            break;
-          case "PATCH":
-            method = HttpMethod.PATCH;
-            break;
-          case "DELETE":
-            method = HttpMethod.DELETE;
-            break;
-          case "HEAD":
-            method = HttpMethod.HEAD;
-            break;
-          case "OPTIONS":
-            method = HttpMethod.OPTIONS;
-            break;
-          case "CONNECT":
-            method = HttpMethod.CONNECT;
-            break;
-          default:
-            return Promise.reject("method '" + test.method + "'is not a HTTP method");
+        if (isPromise(beforeResult)) {
+          await beforeResult;
         }
+      }
 
-        if (test.method === "GET") {
-          reqBody = null;
-        } else {
-          reqBody = self.genReqBody({
-            method:    test.method,
-            reqdata:   test.reqdata,
-            reqformat: test.reqformat,
-            uploads:   test.uploads,
-          });
-        }
+      await self.createMock(dbtables);
 
-        return self.request(
-          test.url,
+      let method,
           reqBody,
-          method,
-          reqformat,
-          (typeof test.uploads !== "undefined"),
-        );
-      }).then((response) => { // Assertion for response
-        // Assert status code
-        if (response.status !== test.status) {
-          return Promise.reject("Assertion Error: Status Code is expected to be \'" +
-            test.status + "\' but returned \'" + response.status + "\'");
-        }
+          reqformat;
 
-        // Skip if resdata is not defined
-        // Note: Do NOT skip when test.resdata === null. `if (!test.resdata) {...` skips when resdata is defined as `null`
-        if (typeof test.resdata !== "undefined") {
-          try {
-            assert.deepStrictEqual(response.json, test.resdata);
-          } catch (err) {
-            return Promise.reject("Assertion Error: response data (resdata) is expected to be: \n" +
-              test.resdata + "\n but returned: \n" + response.json);
-          }
-        }
+      switch (test.reqformat) {
+        case "FORM":
+          reqformat = RequestFormat.Form;
+          break;
+        case "JSON":
+          reqformat = RequestFormat.JSON;
+          break;
+        default:
+          throw new Error("reqformat only supports FORM and JSON; '" + test.reqformat + "'is not supported");
+      }
 
-        return Promise.all([
-          self.assertDB(dbtables),
-          self.assertUploads(dbtables),
-        ]);
-      }).then(() => {
-        if (typeof test.after === "function") {
-          return test.after();
-        } else {
-          return Promise.resolve();
+      switch (test.method) {
+        case "GET":
+          method = HttpMethod.GET;
+          break;
+        case "POST":
+          method = HttpMethod.POST;
+          break;
+        case "PUT":
+          method = HttpMethod.PUT;
+          break;
+        case "PATCH":
+          method = HttpMethod.PATCH;
+          break;
+        case "DELETE":
+          method = HttpMethod.DELETE;
+          break;
+        case "HEAD":
+          method = HttpMethod.HEAD;
+          break;
+        case "OPTIONS":
+          method = HttpMethod.OPTIONS;
+          break;
+        case "CONNECT":
+          method = HttpMethod.CONNECT;
+          break;
+        default:
+          throw new Error("method '" + test.method + "'is not a HTTP method");
+      }
+
+      if (test.method === "GET") {
+        reqBody = null;
+      } else {
+        reqBody = self.genReqBody({
+          method:    test.method,
+          reqdata:   test.reqdata,
+          reqformat: test.reqformat,
+          uploads:   test.uploads,
+        });
+      }
+
+      const response = await self.request(
+        test.url,
+        reqBody,
+        method,
+        reqformat,
+        (typeof test.uploads !== "undefined"),
+      );
+
+      // Assert status code
+      if (response.status !== test.status) {
+        throw new Error("Assertion Error: Status Code is expected to be \'" +
+          test.status + "\' but returned \'" + response.status + "\'");
+      }
+
+      // Skip if resdata is not defined
+      // Note: Do NOT skip when test.resdata === null. `if (!test.resdata) {...` skips when resdata is defined as `null`
+      if (typeof test.resdata !== "undefined") {
+        try {
+          assert.deepStrictEqual(response.json, test.resdata);
+        } catch (err) {
+          throw new Error("Assertion Error: response data (resdata) is expected to be: \n" +
+            test.resdata + "\n but returned: \n" + response.json);
         }
-      }).catch((err) => {
-        console.error(err);
-        return Promise.reject(err);
-      });
+      }
+
+      await Promise.all([
+        self.assertDB(dbtables),
+        self.assertUploads(dbtables),
+      ]);
+
+      if (typeof test.after === "function") {
+        const afterResult = test.after();
+
+        if (isPromise(afterResult)) {
+          await afterResult;
+        }
+      }
     }
   }
 
