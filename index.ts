@@ -87,7 +87,31 @@ export class Restament {
     }
   }
 
-  public async test(tests) {
+  public async test(tests: Array<{
+    url: string,
+    method: string,
+    reqformat: string,
+    reqdata: any,
+    uploads: any,
+    status: number,
+    resdata: any,
+    db: Array<{
+      tablename: string,
+      mock: {
+        data: any,
+        uploads: any,
+      },
+      result: {
+        data: any,
+        uploads: Array<{
+          filename: string,
+          original: string,
+        }>,
+      },
+    }>,
+    before: () => void,
+    after: () => void,
+  }>) {
     const self = this;
 
     if (!Array.isArray(tests)) {
@@ -99,9 +123,10 @@ export class Restament {
         throw new Error("Test object has to be object or array of objects!");
       }
 
-      if (!Array.isArray(test.db)) {
-        test.db = [test.db];
-      }
+      // TODO If possible support non-array type
+      // if (!Array.isArray(test.db)) {
+      //   test.db = [test.db];
+      // }
 
       const title = test.url + "should return " + test.status + " on " + test.method + " access (posting in " + test.reqformat + " format)",
             dbtables = test.db.map((table) => {
