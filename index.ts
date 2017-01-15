@@ -10,7 +10,7 @@ import * as knex from "knex";
 import * as fetch from "node-fetch";
 import * as path from "path";
 
-const enum HttpMethod {
+enum HttpMethod {
   GET,
   POST,
   PUT,
@@ -21,8 +21,8 @@ const enum HttpMethod {
   CONNECT,
 }
 
-const enum RequestFormat {
-  Form,
+enum RequestFormat {
+  FORM,
   JSON,
 }
 
@@ -113,6 +113,7 @@ export class Restament {
     after: () => void,
   }>) {
     const self = this;
+    let reqBody;
 
     if (!Array.isArray(tests)) {
       tests = [tests];
@@ -161,50 +162,6 @@ export class Restament {
 
       await self.createMock(dbtables);
 
-      let method,
-          reqBody,
-          reqformat;
-
-      switch (test.reqformat) {
-        case "FORM":
-          reqformat = RequestFormat.Form;
-          break;
-        case "JSON":
-          reqformat = RequestFormat.JSON;
-          break;
-        default:
-          throw new Error("reqformat only supports FORM and JSON; '" + test.reqformat + "'is not supported");
-      }
-
-      switch (test.method) {
-        case "GET":
-          method = HttpMethod.GET;
-          break;
-        case "POST":
-          method = HttpMethod.POST;
-          break;
-        case "PUT":
-          method = HttpMethod.PUT;
-          break;
-        case "PATCH":
-          method = HttpMethod.PATCH;
-          break;
-        case "DELETE":
-          method = HttpMethod.DELETE;
-          break;
-        case "HEAD":
-          method = HttpMethod.HEAD;
-          break;
-        case "OPTIONS":
-          method = HttpMethod.OPTIONS;
-          break;
-        case "CONNECT":
-          method = HttpMethod.CONNECT;
-          break;
-        default:
-          throw new Error("method '" + test.method + "'is not a HTTP method");
-      }
-
       if (test.method === "GET") {
         reqBody = null;
       } else {
@@ -219,8 +176,8 @@ export class Restament {
       const response = await self.request(
         test.url,
         reqBody,
-        method,
-        reqformat,
+        HttpMethod[test.method.toUpperCase()],
+        RequestFormat[test.reqformat.toUpperCase()],
         (typeof test.uploads !== "undefined"),
       );
 
@@ -518,14 +475,20 @@ export class Restament {
     let contentType,
         response: any = {};
 
+    if (typeof method === "undefined") {
+      throw new Error("Unsupported HTTP method");
+    }
+
     if (reqformat === RequestFormat.JSON) {
       contentType = "application/json";
-    } else if (reqformat === RequestFormat.Form) {
+    } else if (reqformat === RequestFormat.FORM) {
       if (upload) {
         contentType = "multipart/form-data";
       } else {
         contentType = "application/x-www-form-urlencoded";
       }
+    } else { // if (typeof reqformat === "undefined")
+      throw new Error("Unsupported reqformat; only supports FORM and JSON");
     }
 
     return fetch(this.config.endpoint + url, {
